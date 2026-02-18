@@ -3,7 +3,9 @@ package git
 import (
 	"bufio"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	gogit "github.com/go-git/go-git/v5"
@@ -11,12 +13,13 @@ import (
 )
 
 type Repo struct {
-	repo *gogit.Repository
-	path string
+	repo      *gogit.Repository
+	path      string
+	snapshots map[string]string // file path -> content at last event
 }
 
 func Open(path string) (*Repo, error) {
-	r := &Repo{path: path}
+	r := &Repo{path: path, snapshots: make(map[string]string)}
 	repo, err := gogit.PlainOpen(path)
 	if err != nil {
 		// Not a git repo - that's fine, gracefully degrade
@@ -50,46 +53,79 @@ func (r *Repo) Path() string {
 }
 
 func (r *Repo) Diff(relPath string) (types.DiffResult, error) {
-	if r.repo == nil {
-		return types.DiffResult{Available: false, Error: "not a git repository"}, nil
+	// Read current file content
+	absPath := filepath.Join(r.path, relPath)
+	currentBytes, err := os.ReadFile(absPath)
+	if err != nil {
+		// File was deleted
+		prev, hasPrev := r.snapshots[relPath]
+		delete(r.snapshots, relPath)
+		if hasPrev && prev != "" {
+			return r.diffStrings(prev, "", relPath)
+		}
+		return types.DiffResult{Available: false, Error: "file not readable"}, nil
+	}
+	current := string(currentBytes)
+
+	// Get the baseline to diff against
+	prev, hasPrev := r.snapshots[relPath]
+
+	// Update snapshot for next time
+	r.snapshots[relPath] = current
+
+	if !hasPrev {
+		// First time seeing this file — try git HEAD as baseline
+		headContent := r.getHeadContent(relPath)
+		if headContent != "" && headContent != current {
+			return r.diffStrings(headContent, current, relPath)
+		}
+		if headContent == current {
+			return types.DiffResult{Available: false, Error: "no changes"}, nil
+		}
+		// No HEAD content (untracked/new repo) — show all as additions
+		return r.diffStrings("", current, relPath)
 	}
 
-	// Use git diff to get proper unified diff output.
-	// Try tracked file diff first, then fall back to showing new file content.
-	output, err := r.gitDiff(relPath)
+	if prev == current {
+		return types.DiffResult{Available: false, Error: "no changes"}, nil
+	}
+
+	return r.diffStrings(prev, current, relPath)
+}
+
+// getHeadContent returns the file content from HEAD, or "" if unavailable.
+func (r *Repo) getHeadContent(relPath string) string {
+	if r.repo == nil {
+		return ""
+	}
+	cmd := exec.Command("git", "-C", r.path, "show", "HEAD:"+relPath)
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return string(out)
+}
+
+// diffStrings produces a unified diff between old and new content using git diff --no-index.
+func (r *Repo) diffStrings(oldContent, newContent, relPath string) (types.DiffResult, error) {
+	tmpDir, err := os.MkdirTemp("", "agent-spy-diff-*")
 	if err != nil {
 		return types.DiffResult{Available: false, Error: err.Error()}, nil
 	}
+	defer os.RemoveAll(tmpDir)
 
-	if output == "" {
-		// No diff from git - file might be untracked (new file)
-		return r.gitDiffNewFile(relPath)
+	oldFile := filepath.Join(tmpDir, "old")
+	newFile := filepath.Join(tmpDir, "new")
+
+	if err := os.WriteFile(oldFile, []byte(oldContent), 0644); err != nil {
+		return types.DiffResult{Available: false, Error: err.Error()}, nil
+	}
+	if err := os.WriteFile(newFile, []byte(newContent), 0644); err != nil {
+		return types.DiffResult{Available: false, Error: err.Error()}, nil
 	}
 
-	return parseDiffOutput(output), nil
-}
-
-// gitDiff runs git diff for a specific file, including both staged and unstaged changes.
-func (r *Repo) gitDiff(relPath string) (string, error) {
-	// git diff HEAD -- <file> shows combined staged + unstaged changes vs HEAD
-	cmd := exec.Command("git", "-C", r.path, "diff", "HEAD", "--", relPath)
-	out, err := cmd.Output()
-	if err != nil {
-		// HEAD might not exist (no commits yet), try diff against empty tree
-		cmd = exec.Command("git", "-C", r.path, "diff", "--", relPath)
-		out, err = cmd.Output()
-		if err != nil {
-			return "", err
-		}
-	}
-	return string(out), nil
-}
-
-// gitDiffNewFile handles untracked files by showing their full content as additions.
-func (r *Repo) gitDiffNewFile(relPath string) (types.DiffResult, error) {
-	// Use git diff --no-index to diff /dev/null against the file
-	cmd := exec.Command("git", "-C", r.path, "diff", "--no-index", "--", "/dev/null", relPath)
-	out, _ := cmd.Output() // exit code 1 is expected (files differ)
+	cmd := exec.Command("git", "diff", "--no-index", "--", oldFile, newFile)
+	out, _ := cmd.Output() // exit code 1 expected when files differ
 
 	output := string(out)
 	if output == "" {

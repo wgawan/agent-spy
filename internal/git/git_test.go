@@ -63,11 +63,11 @@ func TestBranchNonRepo(t *testing.T) {
 	}
 }
 
-func TestDiffModifiedFile(t *testing.T) {
+func TestDiffFirstSeeTrackedFile(t *testing.T) {
 	dir := initTestRepo(t)
 	r, _ := Open(dir)
 
-	// Modify the file
+	// Modify committed file — first Diff call uses HEAD as baseline
 	testFile := filepath.Join(dir, "README.md")
 	os.WriteFile(testFile, []byte("# Test\n\nNew content\n"), 0644)
 
@@ -83,11 +83,11 @@ func TestDiffModifiedFile(t *testing.T) {
 	}
 }
 
-func TestDiffNewFile(t *testing.T) {
+func TestDiffNewFileAllAdditions(t *testing.T) {
 	dir := initTestRepo(t)
 	r, _ := Open(dir)
 
-	// Create a new file
+	// Create a new untracked file — first Diff shows all as additions
 	os.WriteFile(filepath.Join(dir, "new.go"), []byte("package main\n\nfunc hello() {}\n"), 0644)
 
 	diff, err := r.Diff("new.go")
@@ -102,11 +102,41 @@ func TestDiffNewFile(t *testing.T) {
 	}
 }
 
+func TestDiffSnapshotBetweenEdits(t *testing.T) {
+	dir := initTestRepo(t)
+	r, _ := Open(dir)
+
+	// First write — new file, all additions
+	f := filepath.Join(dir, "app.go")
+	os.WriteFile(f, []byte("package main\n\nfunc main() {}\n"), 0644)
+	diff1, _ := r.Diff("app.go")
+	if diff1.Stats.Added != 3 {
+		t.Errorf("first diff: expected 3 added, got %d", diff1.Stats.Added)
+	}
+
+	// Second write — modify one line. Should show deletion + addition, not all additions.
+	os.WriteFile(f, []byte("package main\n\nfunc main() { fmt.Println(\"hi\") }\n"), 0644)
+	diff2, _ := r.Diff("app.go")
+	if !diff2.Available {
+		t.Fatal("expected second diff to be available")
+	}
+	if diff2.Stats.Deleted == 0 {
+		t.Error("second diff: expected deleted lines > 0 (old line removed)")
+	}
+	if diff2.Stats.Added == 0 {
+		t.Error("second diff: expected added lines > 0 (new line added)")
+	}
+	// Should NOT be 3 added lines — only the changed line(s)
+	if diff2.Stats.Added >= 3 {
+		t.Errorf("second diff: got %d added lines, expected fewer than 3 (only changed lines)", diff2.Stats.Added)
+	}
+}
+
 func TestDiffDeletedLines(t *testing.T) {
 	dir := initTestRepo(t)
 	r, _ := Open(dir)
 
-	// Modify the file: remove existing line, add different content
+	// Modify committed file: replace heading with different content
 	testFile := filepath.Join(dir, "README.md")
 	os.WriteFile(testFile, []byte("Changed heading\n"), 0644)
 
@@ -125,7 +155,7 @@ func TestDiffDeletedLines(t *testing.T) {
 	}
 }
 
-func TestDiffNonRepo(t *testing.T) {
+func TestDiffNonExistentFile(t *testing.T) {
 	dir := t.TempDir()
 	r, _ := Open(dir)
 	diff, err := r.Diff("anything.txt")
@@ -133,7 +163,24 @@ func TestDiffNonRepo(t *testing.T) {
 		t.Fatalf("Diff() error: %v", err)
 	}
 	if diff.Available {
-		t.Error("expected diff to NOT be available for non-repo")
+		t.Error("expected diff to NOT be available for non-existent file")
+	}
+}
+
+func TestDiffWorksWithoutGit(t *testing.T) {
+	dir := t.TempDir()
+	r, _ := Open(dir)
+
+	// Create a file in a non-git directory
+	f := filepath.Join(dir, "hello.txt")
+	os.WriteFile(f, []byte("hello world\n"), 0644)
+
+	diff, _ := r.Diff("hello.txt")
+	if !diff.Available {
+		t.Error("expected diff to be available even without git")
+	}
+	if diff.Stats.Added != 1 {
+		t.Errorf("expected 1 added line, got %d", diff.Stats.Added)
 	}
 }
 
