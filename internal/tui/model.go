@@ -62,6 +62,14 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(waitForEvent(m.eventsChan), tick())
 }
 
+func (m Model) fetchDiff(path string) types.DiffResult {
+	if m.diffFn == nil {
+		return types.DiffResult{}
+	}
+	diff, _ := m.diffFn(path)
+	return diff
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -75,16 +83,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.events = append([]types.FileEvent{ev}, m.events...) // prepend (newest first)
 		m.uniqueFiles[ev.Path] = true
 		// Track diff stats
-		if m.diffFn != nil {
-			diff, _ := m.diffFn(ev.Path)
-			if diff.Available {
-				m.totalAdded += diff.Stats.Added
-				m.totalDeleted += diff.Stats.Deleted
-			}
+		diff := m.fetchDiff(ev.Path)
+		if diff.Available {
+			m.totalAdded += diff.Stats.Added
+			m.totalDeleted += diff.Stats.Deleted
 		}
 		// Keep selection on the same event (shift down since we prepended)
 		if len(m.events) > 1 {
 			m.selected++
+		} else {
+			// First event - show its diff
+			m.currentDiff = diff
 		}
 		return m, waitForEvent(m.eventsChan)
 	case tickMsg:
@@ -119,14 +128,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "up", "k":
 		if m.selected > 0 {
 			m.selected--
-			m.updateSelectedDiff()
+			m.currentDiff = m.fetchDiff(m.events[m.selected].Path)
 			m.detailScroll = 0
 		}
 		return m, nil
 	case "down", "j":
 		if m.selected < len(m.events)-1 {
 			m.selected++
-			m.updateSelectedDiff()
+			m.currentDiff = m.fetchDiff(m.events[m.selected].Path)
 			m.detailScroll = 0
 		}
 		return m, nil
@@ -160,13 +169,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
-}
-
-func (m *Model) updateSelectedDiff() {
-	if m.selected >= 0 && m.selected < len(m.events) && m.diffFn != nil {
-		diff, _ := m.diffFn(m.events[m.selected].Path)
-		m.currentDiff = diff
-	}
 }
 
 func (m Model) View() string {
