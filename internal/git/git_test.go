@@ -62,3 +62,54 @@ func TestBranchNonRepo(t *testing.T) {
 		t.Error("expected empty branch for non-repo")
 	}
 }
+
+func TestDiffModifiedFile(t *testing.T) {
+	dir := initTestRepo(t)
+	r, _ := Open(dir)
+
+	// Modify the file
+	testFile := filepath.Join(dir, "README.md")
+	os.WriteFile(testFile, []byte("# Test\n\nNew content\n"), 0644)
+
+	diff, err := r.Diff("README.md")
+	if err != nil {
+		t.Fatalf("Diff() error: %v", err)
+	}
+	if !diff.Available {
+		t.Error("expected diff to be available")
+	}
+	if diff.Stats.Added == 0 {
+		t.Error("expected added lines > 0")
+	}
+}
+
+func TestDiffNewFile(t *testing.T) {
+	dir := initTestRepo(t)
+	r, _ := Open(dir)
+
+	// Create a new file
+	os.WriteFile(filepath.Join(dir, "new.go"), []byte("package main\n\nfunc hello() {}\n"), 0644)
+
+	diff, err := r.Diff("new.go")
+	if err != nil {
+		t.Fatalf("Diff() error: %v", err)
+	}
+	if !diff.Available {
+		t.Error("expected diff to be available")
+	}
+	if diff.Stats.Added != 3 {
+		t.Errorf("expected 3 added lines, got %d", diff.Stats.Added)
+	}
+}
+
+func TestDiffNonRepo(t *testing.T) {
+	dir := t.TempDir()
+	r, _ := Open(dir)
+	diff, err := r.Diff("anything.txt")
+	if err != nil {
+		t.Fatalf("Diff() error: %v", err)
+	}
+	if diff.Available {
+		t.Error("expected diff to NOT be available for non-repo")
+	}
+}
