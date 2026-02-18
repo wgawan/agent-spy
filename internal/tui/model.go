@@ -74,12 +74,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ev := types.FileEvent(msg)
 		m.events = append([]types.FileEvent{ev}, m.events...) // prepend (newest first)
 		m.uniqueFiles[ev.Path] = true
-		// Update diff for selected event
-		if m.selected == 0 && m.diffFn != nil {
+		// Track diff stats
+		if m.diffFn != nil {
 			diff, _ := m.diffFn(ev.Path)
-			m.currentDiff = diff
-			m.totalAdded += diff.Stats.Added
-			m.totalDeleted += diff.Stats.Deleted
+			if diff.Available {
+				m.totalAdded += diff.Stats.Added
+				m.totalDeleted += diff.Stats.Deleted
+			}
+		}
+		// Keep selection on the same event (shift down since we prepended)
+		if len(m.events) > 1 {
+			m.selected++
 		}
 		return m, waitForEvent(m.eventsChan)
 	case tickMsg:

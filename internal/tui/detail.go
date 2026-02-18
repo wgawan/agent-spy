@@ -8,13 +8,17 @@ import (
 )
 
 func (m Model) renderDetail(width, height int) string {
-	if len(m.events) == 0 {
+	filtered := m.filteredEvents()
+	if len(filtered) == 0 || m.selected >= len(filtered) {
 		content := normalStyle.Render("  Select an event to view details")
 		return borderStyle.Width(width - 2).Height(height - 2).Render(content)
 	}
 
 	var lines []string
-	header := headerStyle.Render(" Detail")
+
+	// Show selected file info
+	ev := filtered[m.selected]
+	header := headerStyle.Render(fmt.Sprintf(" %s %s %s", ev.Op.Symbol(), ev.Path, ev.Timestamp.Format("15:04:05")))
 	lines = append(lines, header)
 
 	if !m.currentDiff.Available {

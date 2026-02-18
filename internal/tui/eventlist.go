@@ -24,13 +24,15 @@ func (m Model) renderEventList(width, height int) string {
 		if i >= height-3 { // leave room for header and border
 			break
 		}
-		line := formatEventLine(ev, width-4)
 		if i == m.selected {
-			line = selectedStyle.Width(width - 4).Render(line)
+			line := formatEventLine(ev, width-6)
+			line = selectedStyle.Width(width - 4).Render("▶ " + line)
+			lines = append(lines, line)
 		} else {
-			line = normalStyle.Width(width - 4).Render(line)
+			line := formatEventLine(ev, width-6)
+			line = normalStyle.Width(width - 4).Render("  " + line)
+			lines = append(lines, line)
 		}
-		lines = append(lines, line)
 	}
 
 	content := strings.Join(lines, "\n")
