@@ -15,10 +15,20 @@ import (
 	"github.com/wally/agent-spy/internal/watcher"
 )
 
+type stringSlice []string
+
+func (s *stringSlice) String() string { return fmt.Sprintf("%v", *s) }
+func (s *stringSlice) Set(v string) error {
+	*s = append(*s, v)
+	return nil
+}
+
 func main() {
 	debounce := flag.Int("debounce", 500, "debounce interval in milliseconds")
 	logFile := flag.String("log", "", "write events to log file")
 	noGit := flag.Bool("no-git", false, "disable git integration")
+	var filters stringSlice
+	flag.Var(&filters, "filter", "additional exclude patterns (can be specified multiple times)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: agent-spy [flags] [path]\n\n")
 		fmt.Fprintf(os.Stderr, "A live TUI for watching file changes in your project.\n\n")
@@ -79,6 +89,7 @@ func main() {
 	if gitAvailable {
 		extraFilters = repo.IgnorePatterns()
 	}
+	extraFilters = append(extraFilters, filters...)
 
 	w, err := watcher.New(watcher.Config{
 		Path:       absPath,
