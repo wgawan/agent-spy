@@ -26,6 +26,10 @@ func TestSmartFilter(t *testing.T) {
 		{"foo.pyc", true},
 		{"bar.o", true},
 		{"Baz.class", true},
+		{".main.go.swp", true},
+		{".model.go.swo", true},
+		{"main.go~", true},
+		{"4913", true},
 		// Should NOT be filtered:
 		{"src/app.go", false},
 		{"README.md", false},

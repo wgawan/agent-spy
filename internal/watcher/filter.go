@@ -31,6 +31,9 @@ var defaultFilteredExts = []string{
 	".pyc",
 	".o",
 	".class",
+	".swp",
+	".swo",
+	".swn",
 }
 
 type SmartFilter struct {
@@ -75,6 +78,11 @@ func (f *SmartFilter) IsFiltered(path string) bool {
 		if ext == filteredExt {
 			return true
 		}
+	}
+
+	// Filter vim/editor temp files (~ suffix, 4913)
+	if strings.HasSuffix(base, "~") || base == "4913" {
+		return true
 	}
 
 	// Check extra patterns
