@@ -27,6 +27,7 @@ type Model struct {
 	diffFn       func(string) (types.DiffResult, error)
 	currentDiff  types.DiffResult
 	detailScroll int
+	autoScroll   bool
 	quitting     bool
 }
 
@@ -92,12 +93,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.totalAdded += diff.Stats.Added
 			m.totalDeleted += diff.Stats.Deleted
 		}
-		// Keep selection on the same event (shift down since we prepended)
-		if len(m.events) > 1 {
-			m.selected++
-		} else {
-			// First event - show its diff
+		if m.autoScroll || len(m.events) == 1 {
+			// Jump to newest event
+			m.selected = 0
 			m.currentDiff = diff
+			m.detailScroll = 0
+		} else {
+			// Keep selection on the same event (shift down since we prepended)
+			m.selected++
 		}
 		return m, waitForEvent(m.eventsChan)
 	case tickMsg:
@@ -134,12 +137,22 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.selected--
 			m.currentDiff = m.diffs[m.selected]
 			m.detailScroll = 0
+			m.autoScroll = false
 		}
 		return m, nil
 	case "down", "j":
 		if m.selected < len(m.events)-1 {
 			m.selected++
 			m.currentDiff = m.diffs[m.selected]
+			m.detailScroll = 0
+			m.autoScroll = false
+		}
+		return m, nil
+	case "a":
+		m.autoScroll = !m.autoScroll
+		if m.autoScroll && len(m.events) > 0 {
+			m.selected = 0
+			m.currentDiff = m.diffs[0]
 			m.detailScroll = 0
 		}
 		return m, nil

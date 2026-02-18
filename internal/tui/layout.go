@@ -39,7 +39,11 @@ func (m Model) renderHelp() string {
 			" filter: " + m.filterText + "█  [enter: apply] [esc: cancel]",
 		)
 	}
+	autoScrollStatus := "off"
+	if m.autoScroll {
+		autoScrollStatus = "on"
+	}
 	return helpStyle.Width(m.width).Render(
-		" ↑↓:select  F:fullscreen  f:filter  c:clear  ctrl+d/u:scroll detail  q:quit",
+		" ↑↓:select  a:auto-scroll[" + autoScrollStatus + "]  F:fullscreen  f:filter  c:clear  ctrl+d/u:scroll  q:quit",
 	)
 }
