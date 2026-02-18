@@ -9,6 +9,7 @@ import (
 
 type Model struct {
 	events       []types.FileEvent
+	diffs        []types.DiffResult // snapshot of diff at time each event arrived
 	eventsChan   chan types.FileEvent
 	selected     int
 	width        int
@@ -35,6 +36,7 @@ type tickMsg time.Time
 func New(eventsChan chan types.FileEvent, watchPath string, gitBranch string, gitAvailable bool, diffFn func(string) (types.DiffResult, error)) Model {
 	return Model{
 		events:       make([]types.FileEvent, 0),
+		diffs:        make([]types.DiffResult, 0),
 		eventsChan:   eventsChan,
 		uniqueFiles:  make(map[string]bool),
 		startTime:    time.Now(),
@@ -80,10 +82,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case fileEventMsg:
 		ev := types.FileEvent(msg)
-		m.events = append([]types.FileEvent{ev}, m.events...) // prepend (newest first)
-		m.uniqueFiles[ev.Path] = true
-		// Track diff stats
+		// Snapshot the diff at this moment
 		diff := m.fetchDiff(ev.Path)
+		// Prepend event and its diff (newest first)
+		m.events = append([]types.FileEvent{ev}, m.events...)
+		m.diffs = append([]types.DiffResult{diff}, m.diffs...)
+		m.uniqueFiles[ev.Path] = true
 		if diff.Available {
 			m.totalAdded += diff.Stats.Added
 			m.totalDeleted += diff.Stats.Deleted
@@ -128,14 +132,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "up", "k":
 		if m.selected > 0 {
 			m.selected--
-			m.currentDiff = m.fetchDiff(m.events[m.selected].Path)
+			m.currentDiff = m.diffs[m.selected]
 			m.detailScroll = 0
 		}
 		return m, nil
 	case "down", "j":
 		if m.selected < len(m.events)-1 {
 			m.selected++
-			m.currentDiff = m.fetchDiff(m.events[m.selected].Path)
+			m.currentDiff = m.diffs[m.selected]
 			m.detailScroll = 0
 		}
 		return m, nil
@@ -153,6 +157,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "c":
 		m.events = nil
+		m.diffs = nil
 		m.selected = 0
 		m.uniqueFiles = make(map[string]bool)
 		m.totalAdded = 0
