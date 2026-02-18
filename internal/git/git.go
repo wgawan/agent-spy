@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	gogit "github.com/go-git/go-git/v5"
-	"github.com/wally/agent-spy/internal/types"
+	"github.com/wgawan/agent-spy/internal/types"
 )
 
 type Repo struct {

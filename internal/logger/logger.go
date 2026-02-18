@@ -5,7 +5,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/wally/agent-spy/internal/types"
+	"github.com/wgawan/agent-spy/internal/types"
 )
 
 type Logger struct {

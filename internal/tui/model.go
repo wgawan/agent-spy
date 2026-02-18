@@ -4,7 +4,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/wally/agent-spy/internal/types"
+	"github.com/wgawan/agent-spy/internal/types"
 )
 
 type Model struct {

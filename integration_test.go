@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wally/agent-spy/internal/types"
-	"github.com/wally/agent-spy/internal/watcher"
+	"github.com/wgawan/agent-spy/internal/types"
+	"github.com/wgawan/agent-spy/internal/watcher"
 )
 
 func TestEndToEndWatchAndEvent(t *testing.T) {

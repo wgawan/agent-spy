@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/wally/agent-spy/internal/types"
+	"github.com/wgawan/agent-spy/internal/types"
 )
 
 func (m Model) renderDetail(width, height int) string {

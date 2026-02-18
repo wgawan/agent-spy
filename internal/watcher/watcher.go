@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/wally/agent-spy/internal/types"
+	"github.com/wgawan/agent-spy/internal/types"
 )
 
 type Config struct {

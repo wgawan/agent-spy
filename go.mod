@@ -1,4 +1,4 @@
-module github.com/wally/agent-spy
+module github.com/wgawan/agent-spy
 
 go 1.19
 

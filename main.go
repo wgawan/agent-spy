@@ -8,11 +8,11 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	gitpkg "github.com/wally/agent-spy/internal/git"
-	"github.com/wally/agent-spy/internal/logger"
-	"github.com/wally/agent-spy/internal/tui"
-	"github.com/wally/agent-spy/internal/types"
-	"github.com/wally/agent-spy/internal/watcher"
+	gitpkg "github.com/wgawan/agent-spy/internal/git"
+	"github.com/wgawan/agent-spy/internal/logger"
+	"github.com/wgawan/agent-spy/internal/tui"
+	"github.com/wgawan/agent-spy/internal/types"
+	"github.com/wgawan/agent-spy/internal/watcher"
 )
 
 type stringSlice []string
