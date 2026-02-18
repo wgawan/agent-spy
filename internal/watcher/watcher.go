@@ -3,7 +3,6 @@ package watcher
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +20,7 @@ type Config struct {
 type Watcher struct {
 	config  Config
 	fsw     *fsnotify.Watcher
+	filter  *SmartFilter
 	pending map[string]*pendingEvent
 	mu      sync.Mutex
 	done    chan struct{}
@@ -44,6 +44,7 @@ func New(cfg Config) (*Watcher, error) {
 	w := &Watcher{
 		config:  cfg,
 		fsw:     fsw,
+		filter:  NewSmartFilter(cfg.Filters),
 		pending: make(map[string]*pendingEvent),
 		done:    make(chan struct{}),
 	}
@@ -55,8 +56,8 @@ func New(cfg Config) (*Watcher, error) {
 		}
 		if info.IsDir() {
 			// Skip filtered directories
-			base := filepath.Base(path)
-			if base == ".git" {
+			relPath, relErr := filepath.Rel(cfg.Path, path)
+			if relErr == nil && w.filter.IsFiltered(relPath+"/") {
 				return filepath.SkipDir
 			}
 			return fsw.Add(path)
@@ -184,15 +185,7 @@ func (w *Watcher) flush(key string) {
 }
 
 func (w *Watcher) isFiltered(path string) bool {
-	for _, pattern := range w.config.Filters {
-		if matched, _ := filepath.Match(pattern, filepath.Base(path)); matched {
-			return true
-		}
-		if strings.Contains(path, pattern) {
-			return true
-		}
-	}
-	return false
+	return w.filter.IsFiltered(path)
 }
 
 func fsOpToType(op fsnotify.Op) types.Operation {
