@@ -113,3 +113,38 @@ func TestDiffNonRepo(t *testing.T) {
 		t.Error("expected diff to NOT be available for non-repo")
 	}
 }
+
+func TestGitignorePatterns(t *testing.T) {
+	dir := initTestRepo(t)
+
+	// Create .gitignore
+	os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*.log\ntmp/\n"), 0644)
+
+	r, _ := Open(dir)
+	patterns := r.IgnorePatterns()
+
+	if len(patterns) == 0 {
+		t.Fatal("expected ignore patterns")
+	}
+
+	// Should contain *.log and tmp/
+	found := map[string]bool{}
+	for _, p := range patterns {
+		found[p] = true
+	}
+	if !found["*.log"] {
+		t.Error("expected *.log in patterns")
+	}
+	if !found["tmp/"] {
+		t.Error("expected tmp/ in patterns")
+	}
+}
+
+func TestGitignorePatternsNonRepo(t *testing.T) {
+	dir := t.TempDir()
+	r, _ := Open(dir)
+	patterns := r.IgnorePatterns()
+	if len(patterns) != 0 {
+		t.Errorf("expected no patterns for non-repo, got %v", patterns)
+	}
+}

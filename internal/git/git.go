@@ -1,6 +1,7 @@
 package git
 
 import (
+	"bufio"
 	"fmt"
 	"strings"
 
@@ -206,4 +207,32 @@ func computeSimpleDiff(old, new string) types.DiffResult {
 		Hunks:     hunks,
 		Stats:     types.DiffStats{Added: added, Deleted: deleted},
 	}
+}
+
+func (r *Repo) IgnorePatterns() []string {
+	if r.repo == nil {
+		return nil
+	}
+
+	wt, err := r.repo.Worktree()
+	if err != nil {
+		return nil
+	}
+
+	f, err := wt.Filesystem.Open(".gitignore")
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	var patterns []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		patterns = append(patterns, line)
+	}
+	return patterns
 }
