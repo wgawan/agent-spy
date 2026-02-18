@@ -124,10 +124,41 @@ agent-spy -log session.log ~/projects/myapp
 agent-spy -no-git /tmp/scratch
 ```
 
-## Requirements
+## Prerequisites
 
-- Go 1.19+
-- `git` CLI (for diff functionality; the tool works without it but diffs will be unavailable)
+You need **Go** and **git** installed. If you already have both, skip to [Quickstart](#quickstart).
+
+**Install Go:**
+
+```bash
+# macOS (Homebrew)
+brew install go
+
+# Ubuntu / Debian
+sudo apt update && sudo apt install -y golang
+
+# Fedora
+sudo dnf install -y golang
+
+# Or download from https://go.dev/dl/ for any platform
+```
+
+Verify with `go version` — you need 1.19 or newer.
+
+**Install git** (if you don't have it):
+
+```bash
+# macOS
+brew install git
+
+# Ubuntu / Debian
+sudo apt install -y git
+
+# Fedora
+sudo dnf install -y git
+```
+
+That's it. No other dependencies are needed — `go build` fetches everything else automatically.
 
 ## Building from source
 
