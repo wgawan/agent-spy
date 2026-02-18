@@ -37,7 +37,7 @@ AI coding agents work fast. They create, modify, and delete files across your pr
 
 ```bash
 # Install
-go install github.com/wally/agent-spy@latest
+go install github.com/wgawan/agent-spy@latest
 
 # Or build from source
 git clone https://github.com/wgawan/agent-spy.git
