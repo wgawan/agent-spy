@@ -24,6 +24,7 @@ func (s *stringSlice) Set(v string) error {
 }
 
 func main() {
+	version := flag.Bool("version", false, "print version")
 	debounce := flag.Int("debounce", 500, "debounce interval in milliseconds")
 	logFile := flag.String("log", "", "write events to log file")
 	noGit := flag.Bool("no-git", false, "disable git integration")
@@ -36,6 +37,11 @@ func main() {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+
+	if *version {
+		fmt.Println("agent-spy v0.1.0")
+		os.Exit(0)
+	}
 
 	watchPath := "."
 	if flag.NArg() > 0 {
