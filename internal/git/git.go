@@ -3,10 +3,10 @@ package git
 import (
 	"bufio"
 	"fmt"
+	"os/exec"
 	"strings"
 
 	gogit "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/wally/agent-spy/internal/types"
 )
 
@@ -54,152 +54,99 @@ func (r *Repo) Diff(relPath string) (types.DiffResult, error) {
 		return types.DiffResult{Available: false, Error: "not a git repository"}, nil
 	}
 
-	wt, err := r.repo.Worktree()
+	// Use git diff to get proper unified diff output.
+	// Try tracked file diff first, then fall back to showing new file content.
+	output, err := r.gitDiff(relPath)
 	if err != nil {
 		return types.DiffResult{Available: false, Error: err.Error()}, nil
 	}
 
-	status, err := wt.Status()
-	if err != nil {
-		return types.DiffResult{Available: false, Error: err.Error()}, nil
+	if output == "" {
+		// No diff from git - file might be untracked (new file)
+		return r.gitDiffNewFile(relPath)
 	}
 
-	fileStatus := status.File(relPath)
-	if fileStatus.Worktree == gogit.Unmodified && fileStatus.Staging == gogit.Unmodified {
-		return types.DiffResult{Available: false, Error: "file not modified"}, nil
-	}
-
-	// Get HEAD tree
-	ref, err := r.repo.Head()
-	if err != nil {
-		// No commits yet - entire file is "added"
-		return r.diffNewFile(relPath)
-	}
-
-	commit, err := r.repo.CommitObject(ref.Hash())
-	if err != nil {
-		return types.DiffResult{Available: false, Error: err.Error()}, nil
-	}
-
-	tree, err := commit.Tree()
-	if err != nil {
-		return types.DiffResult{Available: false, Error: err.Error()}, nil
-	}
-
-	// Try to get the file from HEAD
-	_, err = tree.File(relPath)
-	if err != nil {
-		// File doesn't exist in HEAD - it's new
-		return r.diffNewFile(relPath)
-	}
-
-	// Get patch between HEAD and worktree
-	return r.getWorkingDirPatch(tree, relPath)
+	return parseDiffOutput(output), nil
 }
 
-func (r *Repo) diffNewFile(relPath string) (types.DiffResult, error) {
-	wt, err := r.repo.Worktree()
+// gitDiff runs git diff for a specific file, including both staged and unstaged changes.
+func (r *Repo) gitDiff(relPath string) (string, error) {
+	// git diff HEAD -- <file> shows combined staged + unstaged changes vs HEAD
+	cmd := exec.Command("git", "-C", r.path, "diff", "HEAD", "--", relPath)
+	out, err := cmd.Output()
 	if err != nil {
-		return types.DiffResult{Available: false, Error: err.Error()}, nil
-	}
-
-	fs := wt.Filesystem
-	f, err := fs.Open(relPath)
-	if err != nil {
-		return types.DiffResult{Available: false, Error: err.Error()}, nil
-	}
-	defer f.Close()
-
-	buf := make([]byte, 32*1024)
-	n, _ := f.Read(buf)
-	content := string(buf[:n])
-	lines := strings.Split(content, "\n")
-
-	var diffLines []types.DiffLine
-	for i, line := range lines {
-		// Skip the trailing empty string from Split
-		if i == len(lines)-1 && line == "" {
-			continue
+		// HEAD might not exist (no commits yet), try diff against empty tree
+		cmd = exec.Command("git", "-C", r.path, "diff", "--", relPath)
+		out, err = cmd.Output()
+		if err != nil {
+			return "", err
 		}
-		diffLines = append(diffLines, types.DiffLine{
-			Content: line,
-			Type:    types.DiffLineAdd,
-		})
 	}
-
-	return types.DiffResult{
-		Available: true,
-		Hunks: []types.DiffHunk{
-			{Header: fmt.Sprintf("@@ -0,0 +1,%d @@", len(diffLines)), Lines: diffLines},
-		},
-		Stats: types.DiffStats{Added: len(diffLines)},
-	}, nil
+	return string(out), nil
 }
 
-func (r *Repo) getWorkingDirPatch(headTree *object.Tree, relPath string) (types.DiffResult, error) {
-	// Read current file from working directory
-	wt, _ := r.repo.Worktree()
-	fs := wt.Filesystem
-	f, err := fs.Open(relPath)
-	if err != nil {
-		return types.DiffResult{Available: false, Error: err.Error()}, nil
-	}
-	defer f.Close()
+// gitDiffNewFile handles untracked files by showing their full content as additions.
+func (r *Repo) gitDiffNewFile(relPath string) (types.DiffResult, error) {
+	// Use git diff --no-index to diff /dev/null against the file
+	cmd := exec.Command("git", "-C", r.path, "diff", "--no-index", "--", "/dev/null", relPath)
+	out, _ := cmd.Output() // exit code 1 is expected (files differ)
 
-	buf := make([]byte, 64*1024)
-	n, _ := f.Read(buf)
-	newContent := string(buf[:n])
-
-	// Read old file from HEAD
-	headFile, err := headTree.File(relPath)
-	if err != nil {
-		return types.DiffResult{Available: false, Error: err.Error()}, nil
-	}
-	oldContent, err := headFile.Contents()
-	if err != nil {
-		return types.DiffResult{Available: false, Error: err.Error()}, nil
+	output := string(out)
+	if output == "" {
+		return types.DiffResult{Available: false, Error: "no changes"}, nil
 	}
 
-	return computeSimpleDiff(oldContent, newContent), nil
+	return parseDiffOutput(output), nil
 }
 
-func computeSimpleDiff(old, new string) types.DiffResult {
-	oldLines := strings.Split(old, "\n")
-	newLines := strings.Split(new, "\n")
-
-	var lines []types.DiffLine
+// parseDiffOutput parses unified diff output into DiffResult.
+func parseDiffOutput(output string) types.DiffResult {
+	lines := strings.Split(output, "\n")
+	var hunks []types.DiffHunk
+	var currentHunk *types.DiffHunk
 	added, deleted := 0, 0
 
-	oldSet := make(map[string]bool)
-	for _, l := range oldLines {
-		oldSet[l] = true
-	}
-	newSet := make(map[string]bool)
-	for _, l := range newLines {
-		newSet[l] = true
-	}
-
-	for _, l := range oldLines {
-		if !newSet[l] && l != "" {
-			lines = append(lines, types.DiffLine{Content: l, Type: types.DiffLineDelete})
-			deleted++
-		} else if l != "" {
-			lines = append(lines, types.DiffLine{Content: l, Type: types.DiffLineContext})
+	for _, line := range lines {
+		if strings.HasPrefix(line, "@@") {
+			// New hunk header
+			if currentHunk != nil {
+				hunks = append(hunks, *currentHunk)
+			}
+			currentHunk = &types.DiffHunk{Header: line}
+			continue
 		}
-	}
-	for _, l := range newLines {
-		if !oldSet[l] && l != "" {
-			lines = append(lines, types.DiffLine{Content: l, Type: types.DiffLineAdd})
+
+		if currentHunk == nil {
+			// Skip diff header lines (diff --git, index, ---, +++)
+			continue
+		}
+
+		if strings.HasPrefix(line, "+") {
+			currentHunk.Lines = append(currentHunk.Lines, types.DiffLine{
+				Content: line[1:],
+				Type:    types.DiffLineAdd,
+			})
 			added++
+		} else if strings.HasPrefix(line, "-") {
+			currentHunk.Lines = append(currentHunk.Lines, types.DiffLine{
+				Content: line[1:],
+				Type:    types.DiffLineDelete,
+			})
+			deleted++
+		} else if strings.HasPrefix(line, " ") {
+			currentHunk.Lines = append(currentHunk.Lines, types.DiffLine{
+				Content: line[1:],
+				Type:    types.DiffLineContext,
+			})
 		}
 	}
 
-	var hunks []types.DiffHunk
-	if len(lines) > 0 {
-		hunks = append(hunks, types.DiffHunk{
-			Header: fmt.Sprintf("@@ -%d +%d @@", len(oldLines), len(newLines)),
-			Lines:  lines,
-		})
+	if currentHunk != nil {
+		hunks = append(hunks, *currentHunk)
+	}
+
+	if len(hunks) == 0 {
+		return types.DiffResult{Available: false, Error: "no changes"}
 	}
 
 	return types.DiffResult{
@@ -235,4 +182,21 @@ func (r *Repo) IgnorePatterns() []string {
 		patterns = append(patterns, line)
 	}
 	return patterns
+}
+
+// StatusSummary returns a short string like "3 modified, 1 new" for the stats bar.
+func (r *Repo) StatusSummary() string {
+	if r.repo == nil {
+		return ""
+	}
+	cmd := exec.Command("git", "-C", r.path, "diff", "--stat", "--shortstat", "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	s := strings.TrimSpace(string(out))
+	if s == "" {
+		return "clean"
+	}
+	return fmt.Sprintf("%s", s)
 }

@@ -102,6 +102,29 @@ func TestDiffNewFile(t *testing.T) {
 	}
 }
 
+func TestDiffDeletedLines(t *testing.T) {
+	dir := initTestRepo(t)
+	r, _ := Open(dir)
+
+	// Modify the file: remove existing line, add different content
+	testFile := filepath.Join(dir, "README.md")
+	os.WriteFile(testFile, []byte("Changed heading\n"), 0644)
+
+	diff, err := r.Diff("README.md")
+	if err != nil {
+		t.Fatalf("Diff() error: %v", err)
+	}
+	if !diff.Available {
+		t.Error("expected diff to be available")
+	}
+	if diff.Stats.Deleted == 0 {
+		t.Error("expected deleted lines > 0")
+	}
+	if diff.Stats.Added == 0 {
+		t.Error("expected added lines > 0")
+	}
+}
+
 func TestDiffNonRepo(t *testing.T) {
 	dir := t.TempDir()
 	r, _ := Open(dir)
