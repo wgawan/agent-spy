@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	gitpkg "github.com/wally/agent-spy/internal/git"
+	"github.com/wally/agent-spy/internal/logger"
 	"github.com/wally/agent-spy/internal/tui"
 	"github.com/wally/agent-spy/internal/types"
 	"github.com/wally/agent-spy/internal/watcher"
@@ -95,23 +96,18 @@ func main() {
 
 	// If logging, wrap the events channel
 	if logWriter != nil {
+		l := logger.New(logWriter)
 		loggedEvents := make(chan types.FileEvent, 100)
 		go func() {
 			for ev := range events {
-				// Write to log
-				stats := ""
+				var stats *types.DiffStats
 				if diffFn != nil {
 					diff, _ := diffFn(ev.Path)
 					if diff.Available {
-						stats = fmt.Sprintf(" +%d -%d", diff.Stats.Added, diff.Stats.Deleted)
+						stats = &diff.Stats
 					}
 				}
-				fmt.Fprintf(logWriter, "%s %s %s%s\n",
-					ev.Timestamp.Format(time.RFC3339),
-					ev.Op.String(),
-					ev.Path,
-					stats,
-				)
+				l.LogEvent(ev, stats)
 				loggedEvents <- ev
 			}
 		}()
