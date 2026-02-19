@@ -85,6 +85,11 @@ func (f *SmartFilter) IsFiltered(path string) bool {
 		return true
 	}
 
+	// Filter agent temp files (e.g. TECH_DOC.md.tmp.1482378.1771433725085)
+	if strings.Contains(base, ".tmp.") {
+		return true
+	}
+
 	// Check extra patterns
 	for _, pattern := range f.extraPatterns {
 		// Directory pattern (ends with /)

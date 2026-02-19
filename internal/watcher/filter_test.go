@@ -30,6 +30,9 @@ func TestSmartFilter(t *testing.T) {
 		{".model.go.swo", true},
 		{"main.go~", true},
 		{"4913", true},
+		{"TECH_DOC.md.tmp.1482378.1771433725085", true},
+		{"main.go.tmp.99999.1234567890123", true},
+		{"src/README.md.tmp.555.999", true},
 		// Should NOT be filtered:
 		{"src/app.go", false},
 		{"README.md", false},
